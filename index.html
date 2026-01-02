@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hangout Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#22c55e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            padding: 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .tabs {
+            display: flex;
+            background: #1e293b;
+            position: sticky;
+            top: 68px;
+            z-index: 99;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.8rem;
+        }
+
+        .tab:hover {
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .tab.active {
+            border-bottom-color: #22c55e;
+            color: #22c55e;
+        }
+
+        .content {
+            padding: 20px;
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            background: #1e293b;
+            color: #e2e8f0;
+            font-size: 1rem;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #22c55e;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .hangout-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            animation: slideIn 0.3s ease-out;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .hangout-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(34, 197, 94, 0.15);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .hangout-date {
+            color: #22c55e;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .hangout-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        .hangout-notes {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #334155;
+            font-size: 0.9rem;
+        }
+
+        .hangout-feel {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .feel-great { background: #22c55e; color: white; }
+        .feel-good { background: #84cc16; color: white; }
+        .feel-okay { background: #eab308; color: black; }
+        .feel-meh { background: #f97316; color: white; }
+        .feel-bad { background: #ef4444; color: white; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            animation: scaleIn 0.3s ease-out;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 25px rgba(34, 197, 94, 0.15);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #22c55e;
+        }
+
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+
+        .stat-card.wide {
+            grid-column: span 2;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+
+        .delete-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .calendar {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .calendar-nav {
+            background: #334155;
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            text-align: center;
+        }
+
+        .calendar-day-header {
+            color: #64748b;
+            font-size: 0.75rem;
+            padding: 5px;
+        }
+
+        .calendar-day {
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .calendar-day.has-hangout {
+            background: #22c55e;
+            color: white;
+            font-weight: 600;
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        .calendar-day.has-hangout:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .calendar-day.empty {
+            color: #475569;
+        }
+
+        .calendar-day.other-month {
+            color: #334155;
+        }
+
+        .export-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-weight: 600;
+            box-shadow: 0 10px 40px rgba(34, 197, 94, 0.4);
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Hangout Tracker</h1>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="add"><i data-lucide="plus-circle" style="width:18px;height:18px;"></i> Add</div>
+        <div class="tab" data-tab="history"><i data-lucide="list" style="width:18px;height:18px;"></i> History</div>
+        <div class="tab" data-tab="stats"><i data-lucide="bar-chart-2" style="width:18px;height:18px;"></i> Stats</div>
+        <div class="tab" data-tab="calendar"><i data-lucide="calendar" style="width:18px;height:18px;"></i> Calendar</div>
+    </div>
+
+    <div class="content active" id="add">
+        <form id="hangout-form">
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="date" required>
+            </div>
+
+            <div class="form-group">
+                <label>How long? (hours)</label>
+                <select id="duration">
+                    <option value="0.5">30 mins</option>
+                    <option value="1">1 hour</option>
+                    <option value="1.5">1.5 hours</option>
+                    <option value="2">2 hours</option>
+                    <option value="3">3 hours</option>
+                    <option value="4">4 hours</option>
+                    <option value="5">5+ hours</option>
+                    <option value="8">Full day</option>
+                    <option value="12">Sleepover</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>What did you do?</label>
+                <select id="activity">
+                    <option value="stayed-in">Stayed in</option>
+                    <option value="went-out">Went out</option>
+                    <option value="date">Date</option>
+                    <option value="existed-together">Just existed together</option>
+                    <option value="movie">Movie/TV</option>
+                    <option value="food">Got food</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Who initiated?</label>
+                <select id="initiated">
+                    <option value="me">Me</option>
+                    <option value="her">Her</option>
+                    <option value="mutual">Mutual</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Location</label>
+                <select id="location">
+                    <option value="her-place">Her place</option>
+                    <option value="my-place">My place</option>
+                    <option value="out">Out somewhere</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>How did it feel?</label>
+                <select id="feel">
+                    <option value="great">Great</option>
+                    <option value="good">Good</option>
+                    <option value="okay">Okay</option>
+                    <option value="meh">Meh</option>
+                    <option value="bad">Bad</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea id="notes" placeholder="Anything you want to remember..."></textarea>
+            </div>
+
+            <button type="submit" class="btn"><i data-lucide="save" style="width:18px;height:18px;"></i> Save Hangout</button>
+        </form>
+    </div>
+
+    <div class="content" id="history">
+        <div id="hangout-list"></div>
+    </div>
+
+    <div class="content" id="stats">
+        <div id="stats-display"></div>
+        <div class="export-section">
+            <button class="btn" onclick="exportData()"><i data-lucide="download" style="width:18px;height:18px;"></i> Export Data (JSON)</button>
+            <br><br>
+            <button class="btn btn-danger" onclick="clearAllData()"><i data-lucide="trash-2" style="width:18px;height:18px;"></i> Clear All Data</button>
+        </div>
+    </div>
+
+    <div class="content" id="calendar">
+        <div class="calendar">
+            <div class="calendar-header">
+                <button class="calendar-nav" onclick="changeMonth(-1)">&lt;</button>
+                <span id="calendar-month-year"></span>
+                <button class="calendar-nav" onclick="changeMonth(1)">&gt;</button>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+        <div id="calendar-hangouts"></div>
+    </div>
+
+    <script>
+        // Data management
+        let hangouts = JSON.parse(localStorage.getItem('hangouts') || '[]');
+        let currentMonth = new Date();
+
+        // Set default date to today
+        document.getElementById('date').valueAsDate = new Date();
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+
+                if (tab.dataset.tab === 'history') renderHistory();
+                if (tab.dataset.tab === 'stats') renderStats();
+                if (tab.dataset.tab === 'calendar') renderCalendar();
+            });
+        });
+
+        // Form submission
+        document.getElementById('hangout-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const hangout = {
+                id: Date.now(),
+                date: document.getElementById('date').value,
+                duration: parseFloat(document.getElementById('duration').value),
+                activity: document.getElementById('activity').value,
+                initiated: document.getElementById('initiated').value,
+                location: document.getElementById('location').value,
+                feel: document.getElementById('feel').value,
+                notes: document.getElementById('notes').value
+            };
+
+            hangouts.push(hangout);
+            hangouts.sort((a, b) => new Date(b.date) - new Date(a.date));
+            localStorage.setItem('hangouts', JSON.stringify(hangouts));
+
+            // Reset form
+            document.getElementById('hangout-form').reset();
+            document.getElementById('date').valueAsDate = new Date();
+
+            showToast('Hangout saved!');
+        });
+
+        // Render history
+        function renderHistory() {
+            const list = document.getElementById('hangout-list');
+
+            if (hangouts.length === 0) {
+                list.innerHTML = '<div class="empty-state">No hangouts logged yet</div>';
+                return;
+            }
+
+            list.innerHTML = hangouts.map(h => `
+                <div class="hangout-card">
+                    <div class="hangout-date">${formatDate(h.date)}</div>
+                    <div class="hangout-details">
+                        <div><strong>Duration:</strong> ${formatDuration(h.duration)}</div>
+                        <div><strong>Activity:</strong> ${formatActivity(h.activity)}</div>
+                        <div><strong>Initiated:</strong> ${capitalize(h.initiated)}</div>
+                        <div><strong>Location:</strong> ${formatLocation(h.location)}</div>
+                    </div>
+                    <span class="hangout-feel feel-${h.feel}">${capitalize(h.feel)}</span>
+                    ${h.notes ? `<div class="hangout-notes">${h.notes}</div>` : ''}
+                    <button class="delete-btn" onclick="deleteHangout(${h.id})">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        // Render stats
+        function renderStats() {
+            const display = document.getElementById('stats-display');
+
+            if (hangouts.length === 0) {
+                display.innerHTML = '<div class="empty-state">No data yet</div>';
+                return;
+            }
+
+            const totalHangouts = hangouts.length;
+            const totalHours = hangouts.reduce((sum, h) => sum + h.duration, 0);
+
+            // This month
+            const now = new Date();
+            const thisMonth = hangouts.filter(h => {
+                const d = parseDate(h.date);
+                return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            });
+
+            // Last 30 days
+            const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            const last30 = hangouts.filter(h => parseDate(h.date) >= thirtyDaysAgo);
+
+            // Who initiates more
+            const myInitiated = hangouts.filter(h => h.initiated === 'me').length;
+            const herInitiated = hangouts.filter(h => h.initiated === 'her').length;
+            const mutualInitiated = hangouts.filter(h => h.initiated === 'mutual').length;
+
+            // Average feel
+            const feelScores = { great: 5, good: 4, okay: 3, meh: 2, bad: 1 };
+            const avgFeel = hangouts.reduce((sum, h) => sum + feelScores[h.feel], 0) / hangouts.length;
+
+            // Days since last hangout
+            const lastHangout = parseDate(hangouts[0].date);
+            const daysSince = Math.floor((now - lastHangout) / (1000 * 60 * 60 * 24));
+
+            display.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">${totalHangouts}</div>
+                        <div class="stat-label">Total Hangouts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${totalHours.toFixed(1)}</div>
+                        <div class="stat-label">Total Hours</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${thisMonth.length}</div>
+                        <div class="stat-label">This Month</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${last30.length}</div>
+                        <div class="stat-label">Last 30 Days</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${daysSince}</div>
+                        <div class="stat-label">Days Since Last</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${avgFeel.toFixed(1)}/5</div>
+                        <div class="stat-label">Avg Feel</div>
+                    </div>
+                    <div class="stat-card wide">
+                        <div class="stat-label" style="margin-bottom: 10px;">Who Initiates?</div>
+                        <div style="display: flex; justify-content: space-around;">
+                            <div><strong style="color: #22c55e;">${myInitiated}</strong> Me</div>
+                            <div><strong style="color: #4ade80;">${herInitiated}</strong> Her</div>
+                            <div><strong style="color: #86efac;">${mutualInitiated}</strong> Mutual</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render calendar
+        function renderCalendar() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+
+            document.getElementById('calendar-month-year').textContent =
+                currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDay = firstDay.getDay();
+            const daysInMonth = lastDay.getDate();
+
+            // Get hangout dates for this month (sleepovers count for 2 days)
+            const hangoutDates = [];
+            hangouts.forEach(h => {
+                const d = parseDate(h.date);
+                if (d.getMonth() === month && d.getFullYear() === year) {
+                    hangoutDates.push(d.getDate());
+                }
+                // If sleepover, also add next day
+                if (h.duration >= 12) {
+                    const nextDay = new Date(d);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    if (nextDay.getMonth() === month && nextDay.getFullYear() === year) {
+                        hangoutDates.push(nextDay.getDate());
+                    }
+                }
+            });
+
+            let html = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                .map(d => `<div class="calendar-day-header">${d}</div>`).join('');
+
+            // Empty cells before first day
+            for (let i = 0; i < startDay; i++) {
+                html += '<div class="calendar-day other-month"></div>';
+            }
+
+            // Days of month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const hasHangout = hangoutDates.includes(day);
+                html += `<div class="calendar-day ${hasHangout ? 'has-hangout' : ''}">${day}</div>`;
+            }
+
+            document.getElementById('calendar-grid').innerHTML = html;
+
+            // Show hangouts for this month
+            const monthHangouts = hangouts.filter(h => {
+                const d = parseDate(h.date);
+                if (d.getMonth() === month && d.getFullYear() === year) return true;
+                // Also include if sleepover that started previous month but extends into this month
+                if (h.duration >= 12) {
+                    const nextDay = new Date(d);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    if (nextDay.getMonth() === month && nextDay.getFullYear() === year) return true;
+                }
+                return false;
+            });
+
+            document.getElementById('calendar-hangouts').innerHTML = monthHangouts.length > 0
+                ? `<p style="color: #94a3b8; margin-bottom: 10px;">${monthHangouts.length} hangout(s) this month</p>`
+                : '<p style="color: #64748b;">No hangouts this month</p>';
+        }
+
+        function changeMonth(delta) {
+            currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
+            renderCalendar();
+        }
+
+        // Helper functions
+        function formatDate(dateStr) {
+            const d = parseDate(dateStr);
+            return d.toLocaleDateString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+            });
+        }
+
+        function formatDuration(hours) {
+            if (hours < 1) return '30 mins';
+            if (hours === 1) return '1 hour';
+            if (hours >= 12) return 'Sleepover';
+            if (hours >= 8) return 'Full day';
+            return hours + ' hours';
+        }
+
+        function formatActivity(activity) {
+            const map = {
+                'stayed-in': 'Stayed in',
+                'went-out': 'Went out',
+                'date': 'Date',
+                'existed-together': 'Existed together',
+                'movie': 'Movie/TV',
+                'food': 'Got food',
+                'other': 'Other'
+            };
+            return map[activity] || activity;
+        }
+
+        function formatLocation(loc) {
+            const map = {
+                'her-place': 'Her place',
+                'my-place': 'My place',
+                'out': 'Out',
+                'other': 'Other'
+            };
+            return map[loc] || loc;
+        }
+
+        function capitalize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+
+        // Parse date without timezone issues
+        function parseDate(dateStr) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        // Toast notification
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast' + (isError ? ' error' : '');
+
+            // Trigger reflow to restart animation
+            toast.offsetHeight;
+            toast.classList.add('show');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2500);
+        }
+
+        function deleteHangout(id) {
+            if (confirm('Delete this hangout?')) {
+                hangouts = hangouts.filter(h => h.id !== id);
+                localStorage.setItem('hangouts', JSON.stringify(hangouts));
+                renderHistory();
+                showToast('Hangout deleted');
+            }
+        }
+
+        function exportData() {
+            const data = JSON.stringify(hangouts, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hangouts-backup.json';
+            a.click();
+        }
+
+        function clearAllData() {
+            if (confirm('Are you sure? This will delete ALL your hangout data!')) {
+                if (confirm('Really sure? This cannot be undone!')) {
+                    hangouts = [];
+                    localStorage.setItem('hangouts', JSON.stringify(hangouts));
+                    renderHistory();
+                    renderStats();
+                    showToast('All data cleared', true);
+                }
+            }
+        }
+
+        // Service worker registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
