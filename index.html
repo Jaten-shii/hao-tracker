@@ -595,8 +595,16 @@
             </div>
 
             <div class="form-group">
-                <label>How long? (hours, e.g. 1.5 = 1hr 30min)</label>
+                <label>How long? (hours together, e.g. 1.5 = 1hr 30min)</label>
                 <input type="number" id="duration" step="0.5" min="0.5" max="24" value="2" required>
+            </div>
+
+            <div class="form-group">
+                <label>Sleepover?</label>
+                <select id="sleepover">
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                </select>
             </div>
 
             <div class="form-group">
@@ -721,6 +729,7 @@
                         id: editingId,
                         date: document.getElementById('date').value,
                         duration: parseFloat(document.getElementById('duration').value),
+                        sleepover: document.getElementById('sleepover').value === 'yes',
                         activity: document.getElementById('activity').value,
                         initiated: document.getElementById('initiated').value,
                         location: document.getElementById('location').value,
@@ -736,6 +745,7 @@
                     id: Date.now(),
                     date: document.getElementById('date').value,
                     duration: parseFloat(document.getElementById('duration').value),
+                    sleepover: document.getElementById('sleepover').value === 'yes',
                     activity: document.getElementById('activity').value,
                     initiated: document.getElementById('initiated').value,
                     location: document.getElementById('location').value,
@@ -769,7 +779,7 @@
                 <div class="hangout-card">
                     <div class="hangout-date">${formatDate(h.date)}</div>
                     <div class="hangout-details">
-                        <div><strong>Duration:</strong> ${formatDuration(h.duration)}</div>
+                        <div><strong>Duration:</strong> ${formatDuration(h.duration)}${h.sleepover ? ' + Sleepover' : ''}</div>
                         <div><strong>Activity:</strong> ${formatActivity(h.activity)}</div>
                         <div><strong>Initiated:</strong> ${capitalize(h.initiated)}</div>
                         <div><strong>Location:</strong> ${formatLocation(h.location)}</div>
@@ -853,10 +863,17 @@
             const daysSince = Math.floor((now - lastHangout) / (1000 * 60 * 60 * 24));
 
             if (statsView === 'month') {
-                // Selected month stats
+                // Selected month stats (sleepovers count for both months if they span)
                 const selectedMonth = hangouts.filter(h => {
                     const d = parseDate(h.date);
-                    return d.getMonth() === statsMonth.getMonth() && d.getFullYear() === statsMonth.getFullYear();
+                    if (d.getMonth() === statsMonth.getMonth() && d.getFullYear() === statsMonth.getFullYear()) return true;
+                    // Also include if sleepover that started previous month but extends into this month
+                    if (h.sleepover) {
+                        const nextDay = new Date(d);
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        if (nextDay.getMonth() === statsMonth.getMonth() && nextDay.getFullYear() === statsMonth.getFullYear()) return true;
+                    }
+                    return false;
                 });
 
                 const monthHours = selectedMonth.reduce((sum, h) => sum + h.duration, 0);
@@ -960,7 +977,7 @@
                     hangoutDates.push(d.getDate());
                 }
                 // If sleepover, also add next day
-                if (h.duration >= 12) {
+                if (h.sleepover) {
                     const nextDay = new Date(d);
                     nextDay.setDate(nextDay.getDate() + 1);
                     if (nextDay.getMonth() === month && nextDay.getFullYear() === year) {
@@ -990,7 +1007,7 @@
                 const d = parseDate(h.date);
                 if (d.getMonth() === month && d.getFullYear() === year) return true;
                 // Also include if sleepover that started previous month but extends into this month
-                if (h.duration >= 12) {
+                if (h.sleepover) {
                     const nextDay = new Date(d);
                     nextDay.setDate(nextDay.getDate() + 1);
                     if (nextDay.getMonth() === month && nextDay.getFullYear() === year) return true;
@@ -1113,6 +1130,7 @@
             // Fill form with hangout data
             document.getElementById('date').value = hangout.date;
             document.getElementById('duration').value = hangout.duration;
+            document.getElementById('sleepover').value = hangout.sleepover ? 'yes' : 'no';
             document.getElementById('activity').value = hangout.activity;
             document.getElementById('initiated').value = hangout.initiated;
             document.getElementById('location').value = hangout.location;
