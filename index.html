@@ -590,21 +590,31 @@
     <div class="content active" id="add">
         <form id="hangout-form">
             <div class="form-group">
-                <label>Date</label>
-                <input type="date" id="date" required>
+                <label>Arrived</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="date" id="arrived-date" required style="flex: 1;">
+                    <input type="time" id="arrived-time" required style="flex: 1;">
+                </div>
             </div>
 
             <div class="form-group">
-                <label>How long? (hours together, e.g. 1.5 = 1hr 30min)</label>
-                <input type="number" id="duration" step="0.5" min="0.5" max="24" value="2" required>
+                <label>Left</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="date" id="left-date" required style="flex: 1;">
+                    <input type="time" id="left-time" required style="flex: 1;">
+                </div>
             </div>
 
             <div class="form-group">
-                <label>Sleepover?</label>
-                <select id="sleepover">
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                </select>
+                <label>Duration (auto-calculated)</label>
+                <input type="text" id="duration-display" readonly style="background: #0f172a; color: #22c55e; font-weight: 600;">
+                <input type="hidden" id="duration">
+            </div>
+
+            <div class="form-group">
+                <label>Sleepover? (auto-detected)</label>
+                <input type="text" id="sleepover-display" readonly style="background: #0f172a; color: #94a3b8;">
+                <input type="hidden" id="sleepover">
             </div>
 
             <div class="form-group">
@@ -700,8 +710,43 @@
         let hangouts = JSON.parse(localStorage.getItem('hangouts') || '[]');
         let currentMonth = new Date();
 
-        // Set default date to today
-        document.getElementById('date').valueAsDate = new Date();
+        // Set default dates to today
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        document.getElementById('arrived-date').value = todayStr;
+        document.getElementById('left-date').value = todayStr;
+
+        // Auto-calculate duration when times/dates change
+        ['arrived-date', 'arrived-time', 'left-date', 'left-time'].forEach(id => {
+            document.getElementById(id).addEventListener('change', calculateDuration);
+        });
+
+        function calculateDuration() {
+            const arrivedDate = document.getElementById('arrived-date').value;
+            const arrivedTime = document.getElementById('arrived-time').value;
+            const leftDate = document.getElementById('left-date').value;
+            const leftTime = document.getElementById('left-time').value;
+
+            if (arrivedDate && arrivedTime && leftDate && leftTime) {
+                const arrived = new Date(`${arrivedDate}T${arrivedTime}`);
+                const left = new Date(`${leftDate}T${leftTime}`);
+                const diffMs = left - arrived;
+                const diffHours = diffMs / (1000 * 60 * 60);
+
+                if (diffHours > 0) {
+                    document.getElementById('duration').value = diffHours;
+                    document.getElementById('duration-display').value = formatDuration(diffHours);
+
+                    // Auto-detect sleepover (different dates)
+                    const isSleepover = arrivedDate !== leftDate;
+                    document.getElementById('sleepover').value = isSleepover ? 'yes' : 'no';
+                    document.getElementById('sleepover-display').value = isSleepover ? 'Yes' : 'No';
+                } else {
+                    document.getElementById('duration-display').value = 'Invalid (left before arrived)';
+                    document.getElementById('sleepover-display').value = '-';
+                }
+            }
+        }
 
         // Tab switching
         document.querySelectorAll('.tab').forEach(tab => {
@@ -717,9 +762,65 @@
             });
         });
 
+        // Migrate old hangouts that don't have arrived/left times
+        function migrateOldHangouts() {
+            let needsSave = false;
+            hangouts = hangouts.map(h => {
+                if (!h.arrivedDate) {
+                    needsSave = true;
+                    // Old format - convert to new format
+                    // Assume arrived at noon, duration determines left time
+                    const arrivedDate = h.date;
+                    const arrivedTime = '12:00';
+                    const arrived = new Date(`${arrivedDate}T${arrivedTime}`);
+                    const left = new Date(arrived.getTime() + h.duration * 60 * 60 * 1000);
+
+                    // If sleepover, the left date is next day
+                    let leftDate, leftTime;
+                    if (h.sleepover) {
+                        // For sleepovers, assume arrived at 6pm, left next morning
+                        const arrivedSleepover = new Date(`${arrivedDate}T18:00`);
+                        const leftSleepover = new Date(arrivedSleepover.getTime() + h.duration * 60 * 60 * 1000);
+                        leftDate = leftSleepover.toISOString().split('T')[0];
+                        leftTime = leftSleepover.toTimeString().slice(0, 5);
+                        return {
+                            ...h,
+                            arrivedDate: arrivedDate,
+                            arrivedTime: '18:00',
+                            leftDate: leftDate,
+                            leftTime: leftTime
+                        };
+                    } else {
+                        leftDate = left.toISOString().split('T')[0];
+                        leftTime = left.toTimeString().slice(0, 5);
+                        return {
+                            ...h,
+                            arrivedDate: arrivedDate,
+                            arrivedTime: arrivedTime,
+                            leftDate: leftDate,
+                            leftTime: leftTime
+                        };
+                    }
+                }
+                return h;
+            });
+            if (needsSave) {
+                localStorage.setItem('hangouts', JSON.stringify(hangouts));
+                console.log('Migrated old hangouts to new format');
+            }
+        }
+        migrateOldHangouts();
+
         // Form submission
         document.getElementById('hangout-form').addEventListener('submit', (e) => {
             e.preventDefault();
+
+            const arrivedDate = document.getElementById('arrived-date').value;
+            const arrivedTime = document.getElementById('arrived-time').value;
+            const leftDate = document.getElementById('left-date').value;
+            const leftTime = document.getElementById('left-time').value;
+            const duration = parseFloat(document.getElementById('duration').value);
+            const isSleepover = arrivedDate !== leftDate;
 
             if (editingId) {
                 // Update existing hangout
@@ -727,9 +828,13 @@
                 if (index !== -1) {
                     hangouts[index] = {
                         id: editingId,
-                        date: document.getElementById('date').value,
-                        duration: parseFloat(document.getElementById('duration').value),
-                        sleepover: document.getElementById('sleepover').value === 'yes',
+                        date: arrivedDate, // Keep for backwards compatibility
+                        arrivedDate: arrivedDate,
+                        arrivedTime: arrivedTime,
+                        leftDate: leftDate,
+                        leftTime: leftTime,
+                        duration: duration,
+                        sleepover: isSleepover,
                         activity: document.getElementById('activity').value,
                         initiated: document.getElementById('initiated').value,
                         location: document.getElementById('location').value,
@@ -743,9 +848,13 @@
                 // Create new hangout
                 const hangout = {
                     id: Date.now(),
-                    date: document.getElementById('date').value,
-                    duration: parseFloat(document.getElementById('duration').value),
-                    sleepover: document.getElementById('sleepover').value === 'yes',
+                    date: arrivedDate, // Keep for backwards compatibility
+                    arrivedDate: arrivedDate,
+                    arrivedTime: arrivedTime,
+                    leftDate: leftDate,
+                    leftTime: leftTime,
+                    duration: duration,
+                    sleepover: isSleepover,
                     activity: document.getElementById('activity').value,
                     initiated: document.getElementById('initiated').value,
                     location: document.getElementById('location').value,
@@ -761,7 +870,11 @@
 
             // Reset form
             document.getElementById('hangout-form').reset();
-            document.getElementById('date').valueAsDate = new Date();
+            const todayReset = new Date().toISOString().split('T')[0];
+            document.getElementById('arrived-date').value = todayReset;
+            document.getElementById('left-date').value = todayReset;
+            document.getElementById('duration-display').value = '';
+            document.getElementById('sleepover-display').value = '';
             document.getElementById('submit-btn').innerHTML = '<i data-lucide="save" style="width:18px;height:18px;"></i> Save Hangout';
             lucide.createIcons();
         });
@@ -775,11 +888,20 @@
                 return;
             }
 
-            list.innerHTML = hangouts.map(h => `
+            list.innerHTML = hangouts.map(h => {
+                const arrivedStr = h.arrivedDate && h.arrivedTime
+                    ? `${formatDate(h.arrivedDate)} @ ${formatTime(h.arrivedTime)}`
+                    : formatDate(h.date);
+                const leftStr = h.leftDate && h.leftTime
+                    ? `${formatDate(h.leftDate)} @ ${formatTime(h.leftTime)}`
+                    : '';
+                const timeRange = leftStr ? `${arrivedStr} → ${leftStr}` : arrivedStr;
+
+                return `
                 <div class="hangout-card">
-                    <div class="hangout-date">${formatDate(h.date)}</div>
+                    <div class="hangout-date">${h.sleepover ? '<i data-lucide="moon" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px;"></i>' : ''}${timeRange}</div>
                     <div class="hangout-details">
-                        <div><strong>Duration:</strong> ${formatDuration(h.duration)}${h.sleepover ? ' + Sleepover' : ''}</div>
+                        <div><strong>Duration:</strong> ${formatDuration(h.duration)}</div>
                         <div><strong>Activity:</strong> ${formatActivity(h.activity)}</div>
                         <div><strong>Initiated:</strong> ${capitalize(h.initiated)}</div>
                         <div><strong>Location:</strong> ${formatLocation(h.location)}</div>
@@ -789,7 +911,7 @@
                     <button class="edit-btn" onclick="editHangout(${h.id})"><i data-lucide="pencil" style="width:14px;height:14px;"></i> Edit</button>
                     <button class="delete-btn" onclick="deleteHangout(${h.id})"><i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete</button>
                 </div>
-            `).join('');
+            `}).join('');
 
             // Re-initialize Lucide icons
             lucide.createIcons();
@@ -858,25 +980,24 @@
             const feelScores = { great: 5, good: 4, okay: 3, meh: 2, bad: 1 };
             const now = new Date();
 
-            // Days since last hangout
-            const lastHangout = parseDate(hangouts[0].date);
+            // Days since last hangout (if sleepover, count from next day)
+            let lastHangout = parseDate(hangouts[0].date);
+            if (hangouts[0].sleepover) {
+                lastHangout.setDate(lastHangout.getDate() + 1);
+            }
             const daysSince = Math.floor((now - lastHangout) / (1000 * 60 * 60 * 24));
 
             if (statsView === 'month') {
-                // Selected month stats (sleepovers count for both months if they span)
-                const selectedMonth = hangouts.filter(h => {
-                    const d = parseDate(h.date);
-                    if (d.getMonth() === statsMonth.getMonth() && d.getFullYear() === statsMonth.getFullYear()) return true;
-                    // Also include if sleepover that started previous month but extends into this month
-                    if (h.sleepover) {
-                        const nextDay = new Date(d);
-                        nextDay.setDate(nextDay.getDate() + 1);
-                        if (nextDay.getMonth() === statsMonth.getMonth() && nextDay.getFullYear() === statsMonth.getFullYear()) return true;
-                    }
-                    return false;
-                });
+                // Selected month stats - properly split hours for hangouts spanning months
+                const targetMonth = statsMonth.getMonth();
+                const targetYear = statsMonth.getFullYear();
 
-                const monthHours = selectedMonth.reduce((sum, h) => sum + h.duration, 0);
+                const selectedMonth = hangouts.filter(h => hangoutOverlapsMonth(h, targetMonth, targetYear));
+
+                // Calculate hours properly split for this month only
+                const monthHours = hangouts.reduce((sum, h) => {
+                    return sum + getHoursForMonth(h, targetMonth, targetYear);
+                }, 0);
                 const monthAvgFeel = selectedMonth.length > 0
                     ? selectedMonth.reduce((sum, h) => sum + feelScores[h.feel], 0) / selectedMonth.length
                     : 0;
@@ -969,20 +1090,22 @@
             const startDay = firstDay.getDay();
             const daysInMonth = lastDay.getDate();
 
-            // Get hangout dates for this month (sleepovers count for 2 days)
+            // Get hangout dates for this month (mark all days the hangout spans)
             const hangoutDates = [];
             hangouts.forEach(h => {
-                const d = parseDate(h.date);
-                if (d.getMonth() === month && d.getFullYear() === year) {
-                    hangoutDates.push(d.getDate());
-                }
-                // If sleepover, also add next day
-                if (h.sleepover) {
-                    const nextDay = new Date(d);
-                    nextDay.setDate(nextDay.getDate() + 1);
-                    if (nextDay.getMonth() === month && nextDay.getFullYear() === year) {
-                        hangoutDates.push(nextDay.getDate());
+                const arrivedDate = h.arrivedDate || h.date;
+                const leftDate = h.leftDate || h.date;
+
+                const arrived = parseDate(arrivedDate);
+                const left = parseDate(leftDate);
+
+                // Loop through all days from arrived to left
+                const current = new Date(arrived);
+                while (current <= left) {
+                    if (current.getMonth() === month && current.getFullYear() === year) {
+                        hangoutDates.push(current.getDate());
                     }
+                    current.setDate(current.getDate() + 1);
                 }
             });
 
@@ -1003,17 +1126,7 @@
             document.getElementById('calendar-grid').innerHTML = html;
 
             // Show hangouts for this month
-            const monthHangouts = hangouts.filter(h => {
-                const d = parseDate(h.date);
-                if (d.getMonth() === month && d.getFullYear() === year) return true;
-                // Also include if sleepover that started previous month but extends into this month
-                if (h.sleepover) {
-                    const nextDay = new Date(d);
-                    nextDay.setDate(nextDay.getDate() + 1);
-                    if (nextDay.getMonth() === month && nextDay.getFullYear() === year) return true;
-                }
-                return false;
-            });
+            const monthHangouts = hangouts.filter(h => hangoutOverlapsMonth(h, month, year));
 
             document.getElementById('calendar-hangouts').innerHTML = monthHangouts.length > 0
                 ? `<p style="color: #94a3b8; margin-bottom: 10px;">${monthHangouts.length} hangout(s) this month</p>`
@@ -1054,12 +1167,61 @@
             ).join('');
         }
 
+        // Calculate hours for a specific month from a hangout
+        function getHoursForMonth(hangout, targetMonth, targetYear) {
+            const arrivedDate = hangout.arrivedDate || hangout.date;
+            const arrivedTime = hangout.arrivedTime || '12:00';
+            const leftDate = hangout.leftDate || hangout.date;
+            const leftTime = hangout.leftTime || '14:00';
+
+            const arrived = new Date(`${arrivedDate}T${arrivedTime}`);
+            const left = new Date(`${leftDate}T${leftTime}`);
+
+            // Month boundaries
+            const monthStart = new Date(targetYear, targetMonth, 1, 0, 0, 0);
+            const monthEnd = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59);
+
+            // If hangout doesn't overlap with this month at all, return 0
+            if (left < monthStart || arrived > monthEnd) {
+                return 0;
+            }
+
+            // Clamp to month boundaries
+            const effectiveStart = arrived < monthStart ? monthStart : arrived;
+            const effectiveEnd = left > monthEnd ? monthEnd : left;
+
+            const hoursInMonth = (effectiveEnd - effectiveStart) / (1000 * 60 * 60);
+            return Math.max(0, hoursInMonth);
+        }
+
+        // Check if hangout overlaps with a specific month
+        function hangoutOverlapsMonth(hangout, targetMonth, targetYear) {
+            const arrivedDate = hangout.arrivedDate || hangout.date;
+            const leftDate = hangout.leftDate || hangout.date;
+
+            const arrived = parseDate(arrivedDate);
+            const left = parseDate(leftDate);
+
+            const monthStart = new Date(targetYear, targetMonth, 1);
+            const monthEnd = new Date(targetYear, targetMonth + 1, 0);
+
+            // Hangout overlaps if it starts before month ends AND ends after month starts
+            return arrived <= monthEnd && left >= monthStart;
+        }
+
         // Helper functions
         function formatDate(dateStr) {
             const d = parseDate(dateStr);
             return d.toLocaleDateString('en-US', {
                 weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
             });
+        }
+
+        function formatTime(timeStr) {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hour12 = hours % 12 || 12;
+            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
         }
 
         function formatDuration(hours) {
@@ -1128,9 +1290,14 @@
             editingId = id;
 
             // Fill form with hangout data
-            document.getElementById('date').value = hangout.date;
+            document.getElementById('arrived-date').value = hangout.arrivedDate || hangout.date;
+            document.getElementById('arrived-time').value = hangout.arrivedTime || '12:00';
+            document.getElementById('left-date').value = hangout.leftDate || hangout.date;
+            document.getElementById('left-time').value = hangout.leftTime || '14:00';
             document.getElementById('duration').value = hangout.duration;
+            document.getElementById('duration-display').value = formatDuration(hangout.duration);
             document.getElementById('sleepover').value = hangout.sleepover ? 'yes' : 'no';
+            document.getElementById('sleepover-display').value = hangout.sleepover ? 'Yes' : 'No';
             document.getElementById('activity').value = hangout.activity;
             document.getElementById('initiated').value = hangout.initiated;
             document.getElementById('location').value = hangout.location;
